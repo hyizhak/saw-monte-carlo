@@ -20,5 +20,5 @@ for _ in range(trials):
 print("PERM estimate:", sum_est / trials)
 
 # Pivot MCMC
-mu_est = smc.run_pivot_get_mu_estimate(n=100, pivot_attempts=200000, burn_in=10000)
+mu_est = smc.run_pivot_get_mu_estimate(n=100, pivot_attempts=200000, burn_in=20000)
 print("Pivot mu estimate for n=100:", mu_est)
