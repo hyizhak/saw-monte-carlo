@@ -19,6 +19,7 @@ A Python library for estimating properties of **Self-Avoiding Walks (SAWs)** on 
 - Enumerations, naive Monte Carlo, and advanced methods like **PERM** (Pruned-Enriched Rosenbluth Method).
 
 **Free software**: MIT license  
+
 .. **Documentation**: https://saw-monte-carlo.readthedocs.io
 
 Features
