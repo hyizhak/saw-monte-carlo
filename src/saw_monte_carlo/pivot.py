@@ -1,9 +1,166 @@
 """
-Pivot MCMC method for SAWs.
+Pivot MCMC method for SAWs
 """
-
 import numpy as np
+import time
 from saw_monte_carlo.utils import SYM_FUNCTIONS
+
+# # Define vectorized symmetry matrices for 2D lattice transformations.
+# # These matrices represent the eight isometries of the square lattice.
+# SYM_MATRICES = np.array([
+#     [[1, 0], [0, 1]],     # Identity
+#     [[0, -1], [1, 0]],    # 90° rotation counterclockwise
+#     [[-1, 0], [0, -1]],   # 180° rotation
+#     [[0, 1], [-1, 0]],    # 270° rotation counterclockwise
+#     [[1, 0], [0, -1]],    # Reflection across the x-axis
+#     [[-1, 0], [0, 1]],    # Reflection across the y-axis
+#     [[0, 1], [1, 0]],     # Reflection across the line y = x
+#     [[0, -1], [-1, 0]]    # Reflection across the line y = -x
+# ])
+
+# def generate_initial_saw(n):
+#     """
+#     Generate a trivial n-step SAW (a straight line along the x-axis)
+#     represented as a NumPy array of shape (n+1, 2).
+#     """
+#     # Each row is a coordinate (x, y)
+#     return np.column_stack((np.arange(n + 1, dtype=int), np.zeros(n + 1, dtype=int)))
+
+# def attempt_pivot(walk, rng=None):
+#     """
+#     Perform a pivot move using vectorized operations.
+
+#     Parameters
+#     ----------
+#     walk : np.ndarray, shape (n+1, 2)
+#         The current walk coordinates.
+#     rng : np.random.Generator, optional
+#         Random number generator for reproducibility.
+
+#     Returns
+#     -------
+#     new_walk : np.ndarray, shape (n+1, 2)
+#         The updated walk if accepted, or the original walk if rejected.
+#     accepted : bool
+#         Whether the pivot move was accepted.
+#     """
+#     if rng is None:
+#         rng = np.random.default_rng(42)
+
+#     n = walk.shape[0] - 1
+#     # Choose a random pivot index (if it is 0 or n, nothing really changes)
+#     p = rng.integers(0, n + 1)
+#     if p == 0 or p == n:
+#         return walk, False
+
+#     # Choose a random symmetry transformation
+#     sym_idx = rng.integers(0, len(SYM_MATRICES))
+#     sym_matrix = SYM_MATRICES[sym_idx]
+
+#     pivot = walk[p].copy()
+#     new_walk = walk.copy()
+
+#     # Decide whether to transform the left or right segment
+#     # (choose the smaller segment to reduce the chance of self-intersections)
+#     if p < n - p:  # Transform left segment: indices 0 to p-1
+#         # Vectorized transformation: subtract pivot, apply matrix, then add pivot back
+#         new_subwalk = pivot + (walk[:p] - pivot) @ sym_matrix.T
+#         new_walk[:p] = new_subwalk
+#     else:  # Transform right segment: indices p+1 to n
+#         new_subwalk = pivot + (walk[p+1:] - pivot) @ sym_matrix.T
+#         new_walk[p+1:] = new_subwalk
+
+#     # Check for self-intersections:
+#     # Convert each row into a single binary string using a structured view.
+#     dt = np.dtype((np.void, new_walk.dtype.itemsize * new_walk.shape[1]))
+#     new_view = new_walk.view(dt).ravel()
+#     if np.unique(new_view).size != new_walk.shape[0]:
+#         # Found duplicates: the new configuration is self-intersecting.
+#         return walk, False
+
+#     return new_walk, True
+
+# def count_free_forward_moves(walk):
+#     """
+#     Count the number of free forward moves at the end of the SAW,
+#     excluding the immediate back-step.
+
+#     Parameters
+#     ----------
+#     walk : np.ndarray, shape (n+1, 2)
+#         The SAW coordinates.
+
+#     Returns
+#     -------
+#     free_count : int
+#         The number of available forward moves.
+#     """
+#     last = walk[-1]
+#     second_last = walk[-2]
+#     back_move = last - second_last
+
+#     # All possible moves on the square lattice.
+#     moves = np.array([[1, 0],
+#                       [-1, 0],
+#                       [0, 1],
+#                       [0, -1]])
+#     # Exclude the move that would go directly backward.
+#     valid_mask = ~np.all(moves == -back_move, axis=1)
+#     valid_moves = moves[valid_mask]
+#     potential_sites = last + valid_moves  # shape (3, 2)
+
+#     # Convert both walk and potential_sites into a structured view for row-wise comparison.
+#     dt = np.dtype((np.void, walk.dtype.itemsize * walk.shape[1]))
+#     walk_view = walk.view(dt).ravel()
+#     potential_view = potential_sites.view(dt).ravel()
+
+#     # Check which potential sites are not in the current walk.
+#     occupied = np.isin(potential_view, walk_view)
+#     free_count = np.count_nonzero(~occupied)
+#     return free_count
+
+# def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000, seed=42):
+#     """
+#     Run pivot MCMC on an n-step SAW and estimate the connective constant (mu)
+#     by averaging the number of free forward moves at the chain end.
+
+#     Parameters
+#     ----------
+#     n : int
+#         Number of steps in the SAW.
+#     pivot_attempts : int
+#         Total number of pivot attempts.
+#     burn_in : int
+#         Number of initial pivot attempts to discard (equilibration period).
+#     seed : int
+#         Seed for reproducibility.
+
+#     Returns
+#     -------
+#     mu_est : float
+#         Estimate of mu based on the average free forward move count.
+#     """
+#     rng = np.random.default_rng(seed)
+#     walk = generate_initial_saw(n)
+
+#     accepted = 0
+#     sum_free_moves = 0
+#     samples = 0
+
+#     for step in range(pivot_attempts):
+#         new_walk, ok = attempt_pivot(walk, rng=rng)
+#         if ok:
+#             walk = new_walk
+#             accepted += 1
+
+#         if step >= burn_in:
+#             free_count = count_free_forward_moves(walk)
+#             sum_free_moves += free_count
+#             samples += 1
+
+#     avg_free = sum_free_moves / samples if samples > 0 else 0.0
+#     mu_est = avg_free
+#     return mu_est
 
 def generate_initial_saw(n):
     """
@@ -11,15 +168,13 @@ def generate_initial_saw(n):
     """
     return [(i, 0) for i in range(n + 1)]
 
-
 def walk_to_set(walk):
     """
     Return a set of coordinates in the given walk for fast occupancy checks.
     """
     return set(walk)
 
-
-def attempt_pivot_optimized(walk, occupied_set, rng=None):
+def attempt_pivot(walk, occupied_set, rng=None):
     """
     Perform a pivot move with partial subwalk updates.
 
@@ -93,7 +248,6 @@ def attempt_pivot_optimized(walk, occupied_set, rng=None):
 
     return new_walk, new_occ, True
 
-
 def count_free_forward_moves(walk):
     """
     For a 2D walk, check how many of the 3 'forward directions' are free
@@ -116,7 +270,6 @@ def count_free_forward_moves(walk):
         if new_site not in occupied:
             free_count += 1
     return free_count
-
 
 def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000, seed=42):
     """
@@ -148,7 +301,7 @@ def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000, seed=42
     samples = 0
 
     for step in range(pivot_attempts):
-        new_walk, new_occ, ok = attempt_pivot_optimized(walk, occupied_set, rng=rng)
+        new_walk, new_occ, ok = attempt_pivot(walk, occupied_set, rng=rng)
         if ok:
             walk, occupied_set = new_walk, new_occ
             accepted += 1
@@ -167,9 +320,8 @@ def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000, seed=42
     # print(f" - mu estimate ~ {mu_est:.6f}")
     return mu_est
 
-
 if __name__ == "__main__":
     # Example usage
-    for test_n in [50, 100, 200, 400, 800, 1600]:
-        mu_est = run_pivot_get_mu_estimate(n=test_n, pivot_attempts=100000, burn_in=10000)
+    for test_n in [50, 100, 200]:
+        mu_est = run_pivot_get_mu_estimate(n=test_n, pivot_attempts=test_n*2000, burn_in=10000)
         print(f'Pivot mu estimate for n={test_n}: {mu_est}')

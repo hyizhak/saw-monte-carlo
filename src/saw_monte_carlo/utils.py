@@ -122,10 +122,10 @@ def get_deviation(estimation, L_max):
     
     Parameters
     ----------
-    L_max : int
-        The length of the walks.
     estimation : float
         The estimated value of c_L.
+    L_max : int
+        The length of the walks.
     
     Returns
     -------
