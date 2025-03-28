@@ -8,7 +8,8 @@ print("Number of SAWs of length", L, "=", smc.count_saws(L))
 
 # Estimate using naive Monte Carlo
 est_cL = smc.estimate_cL(L, N=200000)
-print("Naive MC estimate:", est_cL)
+print("Naive MC estimate for c_L:", est_cL)
+print("Naive MC estimate for mu:", est_cL**(1 / L))
 
 # PERM example
 smc.init_statistics(L)
@@ -17,8 +18,10 @@ sum_est = 0
 for _ in range(trials):
     visited = {(0,0)}
     sum_est += smc.perm_grow(0, 0, 0, visited, weight=1.0, L_max=L)
-print("PERM estimate:", sum_est / trials)
+c_L = sum_est / trials
+print("PERM estimate for c_L:", c_L)
+print("PERM estimate for mu:", c_L**(1 / L))
 
 # Pivot MCMC
 mu_est = smc.run_pivot_get_mu_estimate(n=100, pivot_attempts=200000, burn_in=20000)
-print("Pivot mu estimate for n=100:", mu_est)
+#print("Pivot mu estimate for n=100:", mu_est)
