@@ -41,7 +41,7 @@ def count_saws(L, pos=(0, 0), visited=None):
     return count
 
 
-def generate_aw(L):
+def generate_rw(L, rng=None):
     """
     Generate a random walk (not necessarily self-avoiding) of length L 
     on a 2D square lattice.
@@ -56,16 +56,19 @@ def generate_aw(L):
     list of (int, int)
         A list of coordinates representing the walk.
     """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
     walk = [(0, 0)]
     moves = [(1, 0), (-1, 0), (0, 1), (0, -1)]
     for _ in range(L):
         x, y = walk[-1]
-        dx, dy = moves[np.random.randint(len(moves))]
+        dx, dy = moves[rng.integers(len(moves))]
         walk.append((x + dx, y + dy))
     return walk
 
 
-def estimate_cL(L, N=100000):
+def estimate_cL(L, N=100000, seed=None):
     """
     Estimate the average number of self-avoiding walks (SAWs) of length L
     on a 2D square lattice using naive Monte Carlo.
@@ -82,18 +85,21 @@ def estimate_cL(L, N=100000):
     float
         The estimated average number of SAWs of length L.
     """
+    rng = np.random.default_rng(seed)
+    
     count_saw = 0
     for _ in range(N):
-        walk = generate_aw(L)
+        walk = generate_rw(L, rng=rng)
         # Check if all positions in walk are unique
         if len(walk) == len(set(walk)):
             count_saw += 1
-    return count_saw / N * (4 ** L)\
+    return count_saw / N * (4 ** L)
     
 
 if __name__ == "__main__":
     L = 10
     print(f"Number of SAWs of length {L}: {count_saws(L)}")
     N = 100000
-    est = estimate_cL(L, N)
+    est = estimate_cL(L, N, seed=42)
     print(f"Estimated number of SAWs of length {L} with {N} trials: {est}")
+    print(f"Estimated mu for L={L}: {est**(1 / L)}")

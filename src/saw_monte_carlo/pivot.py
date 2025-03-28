@@ -3,7 +3,7 @@ Pivot MCMC method for SAWs.
 """
 
 import numpy as np
-from .utils import SYM_FUNCTIONS
+from saw_monte_carlo.utils import SYM_FUNCTIONS
 
 def generate_initial_saw(n):
     """
@@ -19,7 +19,7 @@ def walk_to_set(walk):
     return set(walk)
 
 
-def attempt_pivot_optimized(walk, occupied_set):
+def attempt_pivot_optimized(walk, occupied_set, rng=None):
     """
     Perform a pivot move with partial subwalk updates.
 
@@ -29,6 +29,8 @@ def attempt_pivot_optimized(walk, occupied_set):
         The current walk coordinates.
     occupied_set : set of (int, int)
         Occupied positions for quick membership checks.
+    rng : np.random.Generator, optional
+        Random number generator for reproducibility.
 
     Returns
     -------
@@ -40,9 +42,12 @@ def attempt_pivot_optimized(walk, occupied_set):
         accepted : bool
             Whether the pivot was accepted.
     """
+    if rng is None:
+        rng = np.random.default_rng(42)
+
     n = len(walk) - 1
-    p = np.random.randint(n + 1)
-    sym = SYM_FUNCTIONS[np.random.randint(len(SYM_FUNCTIONS))]
+    p = rng.integers(n + 1)
+    sym = SYM_FUNCTIONS[rng.integers(len(SYM_FUNCTIONS))]
 
     if p == 0 or p == n:
         # Pivoting around an endpoint typically doesn't change anything
@@ -113,7 +118,7 @@ def count_free_forward_moves(walk):
     return free_count
 
 
-def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000):
+def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000, seed=42):
     """
     Runs pivot MCMC on an n-step SAW and estimates mu by measuring 
     the average number of free forward moves at the chain end.
@@ -126,12 +131,15 @@ def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000):
         Total number of pivot attempts to run.
     burn_in : int
         Number of initial pivot attempts to discard for equilibration.
+    seed : int, optional
+        Seed for the random number generator.
 
     Returns
     -------
     float
         Estimate of mu based on the average forward move count.
     """
+    rng = np.random.default_rng(seed)
     walk = generate_initial_saw(n)
     occupied_set = walk_to_set(walk)
 
@@ -140,7 +148,7 @@ def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000):
     samples = 0
 
     for step in range(pivot_attempts):
-        new_walk, new_occ, ok = attempt_pivot_optimized(walk, occupied_set)
+        new_walk, new_occ, ok = attempt_pivot_optimized(walk, occupied_set, rng=rng)
         if ok:
             walk, occupied_set = new_walk, new_occ
             accepted += 1
@@ -154,14 +162,14 @@ def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000):
     avg_free = sum_free_moves / samples if samples > 0 else 0.0
     mu_est = avg_free
 
-    print(f"Pivot MCMC for n={n}")
-    print(f" - Acceptance rate: {accepted / pivot_attempts:.3f}")
-    print(f" - mu estimate ~ {mu_est:.6f}")
+    # print(f"Pivot MCMC for n={n}")
+    # print(f" - Acceptance rate: {accepted / pivot_attempts:.3f}")
+    # print(f" - mu estimate ~ {mu_est:.6f}")
     return mu_est
 
 
 if __name__ == "__main__":
     # Example usage
     for test_n in [50, 100, 200, 400, 800, 1600]:
-        run_pivot_get_mu_estimate(n=test_n, pivot_attempts=100000, burn_in=10000)
-        print()
+        mu_est = run_pivot_get_mu_estimate(n=test_n, pivot_attempts=100000, burn_in=10000)
+        print(f'Pivot mu estimate for n={test_n}: {mu_est}')

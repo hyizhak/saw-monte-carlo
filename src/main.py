@@ -1,27 +1,31 @@
 """Main module."""
 import numpy as np
 import saw_monte_carlo as smc
+from saw_monte_carlo.utils import get_deviation
 
 # Use the deterministic algorithm to count SAWs of length L
 L = 10
-print("Number of SAWs of length", L, "=", smc.count_saws(L))
+trials = 500000
+# print("Number of SAWs of length", L, "=", smc.count_saws(L))
 
 # Estimate using naive Monte Carlo
-est_cL = smc.estimate_cL(L, N=200000)
-print("Naive MC estimate for c_L:", est_cL)
-print("Naive MC estimate for mu:", est_cL**(1 / L))
+cL_est_MC = smc.estimate_cL(L, N=trials)
+print(f"Naive MC estimate for c_{L} ≈ {cL_est_MC}")
+print(f"Naive MC estimate for mu ≈ {cL_est_MC**(1/L)}")
+print("Naive MC estimate deviation:", get_deviation(cL_est_MC, L))
+
+# Rosenbluth example
+cL_est_rosenbluth = smc.rosenbluth_estimate_cL(L, trials=trials)
+print(f"Vanilla Rosenbluth estimate for c_{L} ≈ {cL_est_rosenbluth}")
+print(f"Vanilla Rosenbluth estimate for mu ≈ {cL_est_rosenbluth**(1/L)}")
+print("Rosenbluth estimate deviation:", get_deviation(cL_est_rosenbluth, L))
 
 # PERM example
-smc.init_statistics(L)
-trials = 200000
-sum_est = 0
-for _ in range(trials):
-    visited = {(0,0)}
-    sum_est += smc.perm_grow(0, 0, 0, visited, weight=1.0, L_max=L)
-c_L = sum_est / trials
-print("PERM estimate for c_L:", c_L)
-print("PERM estimate for mu:", c_L**(1 / L))
+cL_est_perm = smc.perm_estimate_cL(L, trials, c_minus=0.2, c_plus=3.0)
+print(f"PERM estimate c_{L} ≈ {cL_est_perm}")
+print(f"PERM estimate mu ≈ {cL_est_perm**(1/L)}")
+print("PERM estimate deviation:", get_deviation(cL_est_perm, L))
 
 # Pivot MCMC
 mu_est = smc.run_pivot_get_mu_estimate(n=100, pivot_attempts=200000, burn_in=20000)
-#print("Pivot mu estimate for n=100:", mu_est)
+print("Pivot mu estimate for n=100:", mu_est)

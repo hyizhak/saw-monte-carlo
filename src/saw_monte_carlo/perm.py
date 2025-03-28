@@ -4,102 +4,154 @@ PERM (Pruned-Enriched Rosenbluth Method) for SAWs.
 
 import numpy as np
 
-# Global accumulators for partial-walk statistics
-global_w = []
-global_s = []
-
-def init_statistics(L_max):
+def perm_recursive(n, L, weight, pos, visited, rng, stats, c_plus, c_minus, results):
     """
-    Initialize global statistics arrays for lengths 0..L_max.
-    """
-    global global_w, global_s
-    global_w = [0.0] * (L_max + 1)
-    global_s = [0] * (L_max + 1)
-
-
-def perm_grow(n, x, y, visited, weight, L_max):
-    """
-    Recursively grow a self-avoiding walk using PERM.
-
+    Recursively grow a self-avoiding walk (SAW) using the PERM algorithm.
+    
     Parameters
     ----------
     n : int
-        Current length of the walk.
-    x, y : int
-        Current position on the lattice.
-    visited : set
-        Set of visited coordinates.
+        Current length of the walk (number of steps taken so far).
+    L : int
+        Target length of the walk.
     weight : float
-        Current weight for this partial walk.
-    L_max : int
-        Target maximum length of the walk.
+        Current weight of the walk.
+    pos : tuple of int
+        Current lattice position (x, y).
+    visited : set of tuple
+        Set of lattice sites already visited by the walk.
+    rng : np.random.Generator
+        Random number generator for reproducibility.
+    stats : dict
+        Dictionary holding statistics for each step (keys "weight_sum" and "tours").
+        These are used to compute local average weights for pruning/enrichment.
+    c_plus : float
+        Enrichment threshold multiplier.
+    c_minus : float
+        Pruning threshold multiplier.
+    results : list
+        List to collect the weights of completed walks (of length L).
+    """
+    # Update statistics for the current length.
+    stats["tours"][n] += 1
+    stats["weight_sum"][n] += weight
 
+    # If the target length is reached, record the completed walk's weight.
+    if n == L:
+        results.append(weight)
+        return
+
+    # Find all allowed moves (neighbors) from the current position.
+    x, y = pos
+    neighbors = []
+    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+        new_pos = (x + dx, y + dy)
+        if new_pos not in visited:
+            neighbors.append(new_pos)
+    
+    # If no moves are available, the walk is trapped.
+    if not neighbors:
+        return
+
+    # Multiply the weight by the number of available moves (Rosenbluth factor).
+    a = len(neighbors)
+    new_weight = weight * a
+
+    # Determine the average weight for the next step (if any walks have reached that length).
+    if stats["tours"][n + 1] > 0:
+        avg = stats["weight_sum"][n + 1] / stats["tours"][n + 1]
+    else:
+        avg = new_weight  # Default if no data exists yet.
+
+    # Set thresholds for enrichment and pruning.
+    W_plus = c_plus * avg
+    W_minus = c_minus * avg
+
+    # Enrichment: if the weight is too high, create multiple copies.
+    if new_weight > W_plus:
+        # Number of clones (at least one)
+        m = max(int(new_weight / W_plus), 1)
+        # Divide the weight equally among the clones.
+        new_weight /= m
+        for _ in range(m):
+            # Choose one neighbor uniformly at random.
+            chosen = neighbors[rng.integers(len(neighbors))]
+            new_visited = visited.copy()
+            new_visited.add(chosen)
+            perm_recursive(n + 1, L, new_weight, chosen, new_visited, rng, stats, c_plus, c_minus, results)
+    # Pruning: if the weight is too low, kill the walk with probability 1/2.
+    elif new_weight < W_minus:
+        if rng.random() < 0.5:
+            return
+        else:
+            new_weight *= 2
+            chosen = neighbors[rng.integers(len(neighbors))]
+            new_visited = visited.copy()
+            new_visited.add(chosen)
+            perm_recursive(n + 1, L, new_weight, chosen, new_visited, rng, stats, c_plus, c_minus, results)
+    # Otherwise, continue with normal growth.
+    else:
+        chosen = neighbors[rng.integers(len(neighbors))]
+        new_visited = visited.copy()
+        new_visited.add(chosen)
+        perm_recursive(n + 1, L, new_weight, chosen, new_visited, rng, stats, c_plus, c_minus, results)
+
+
+def perm_estimate_cL(L, iterations=1000, c_minus=0.2, c_plus=3.0, seed=42):
+    """
+    Estimate the number of SAWs (c_L) for a given length L using the PERM algorithm.
+    
+    Parameters
+    ----------
+    L : int
+        The target walk length (number of steps).
+    iterations : int
+        Number of independent PERM runs (each run can produce one or more complete walks).
+    c_minus : float
+        Pruning threshold multiplier.
+    c_plus : float
+        Enrichment threshold multiplier.
+    seed : int or None
+        Seed for reproducibility (optional).
+    
     Returns
     -------
     float
-        Contribution to the final c_{L_max} estimate from this branch.
+        Estimate of c_L (the total weight of complete walks averaged over the iterations).
     """
-    global global_w, global_s
-
-    # Record partial walk stats
-    global_s[n] += 1
-    global_w[n] += weight
-
-    if n == L_max:
-        # Reached the full length
-        return weight  # This weight contributes to c_{L_max}
-
-    # Determine allowed moves
-    moves = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-    neighbors = []
-    for dx, dy in moves:
-        nx, ny = x + dx, y + dy
-        if (nx, ny) not in visited:
-            neighbors.append((nx, ny))
-    if not neighbors:
-        # Dead end
+    rng = np.random.default_rng(seed)
+    results = []
+    # Initialize statistics for each step (from 0 to L).
+    stats = {
+        "weight_sum": [0.0] * (L + 1),
+        "tours": [0] * (L + 1)
+    }
+    
+    # Run the PERM growth process several times.
+    for _ in range(iterations):
+        perm_recursive(
+            n=0,
+            L=L,
+            weight=1.0,
+            pos=(0, 0),
+            visited={(0, 0)},
+            rng=rng,
+            stats=stats,
+            c_plus=c_plus,
+            c_minus=c_minus,
+            results=results
+        )
+    
+    # The estimator for c_L is the average weight of completed walks per iteration.
+    if len(results) == 0:
         return 0.0
-
-    a = len(neighbors)  # number of allowed moves
-    # Current average weight at length n (or fallback to current weight)
-    if global_s[n] > 0:
-        target_weight = global_w[n] / global_s[n]
-    else:
-        target_weight = weight
-
-    # Compute ratio
-    R = weight / target_weight
-    copies = int(R)
-    if np.random.rand() < (R - copies):
-        copies += 1
-    # Pruning if copies=0
-    if copies == 0:
-        return 0.0
-
-    # Set new weight for continuing
-    new_weight = target_weight
-    total_weight_contrib = 0.0
-
-    for _ in range(copies):
-        # Choose a random neighbor
-        nx, ny = neighbors[np.random.randint(len(neighbors))]
-        visited.add((nx, ny))
-        branch_contrib = perm_grow(n + 1, nx, ny, visited, new_weight * a, L_max)
-        total_weight_contrib += branch_contrib
-        visited.remove((nx, ny))
-
-    return total_weight_contrib
+    return sum(results) / iterations
 
 
 if __name__ == "__main__":
     # Example usage
-    L_max = 20
-    init_statistics(L_max)
-    trials = 100000  # number of independent PERM growth attempts
-    sum_estimates = 0.0
-    for _ in range(trials):
-        visited = {(0, 0)}
-        sum_estimates += perm_grow(0, 0, 0, visited, weight=1.0, L_max=L_max)
-
-    c_L_est = sum_estimates / trials
-    print(f"PERM estimate c_{L_max} ≈ {c_L_est}")
+    L = 20
+    iterations = 200000  
+    cL_est = perm_estimate_cL(L, iterations=iterations, c_minus=0.2, c_plus=3.0, seed=42)
+    print(f"PERM estimate for c_{L} ≈ {cL_est}")
+    print(f"PERM estimate for mu ≈ {cL_est**(1/L)}")
