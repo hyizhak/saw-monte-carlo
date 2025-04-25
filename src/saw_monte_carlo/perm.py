@@ -3,6 +3,7 @@ PERM (Pruned-Enriched Rosenbluth Method) for SAWs.
 """
 
 import numpy as np
+import sys
 
 def perm_recursive(n, L, weight, pos, visited, rng, stats, c_plus, c_minus, results):
     """
@@ -119,6 +120,8 @@ def perm_estimate_cL(L, iterations=1000, c_minus=0.2, c_plus=3.0, seed=42):
     float
         Estimate of c_L (the total weight of complete walks averaged over the iterations).
     """
+    sys.setrecursionlimit(max(10_000, L*2))
+
     rng = np.random.default_rng(seed)
     results = []
     # Initialize statistics for each step (from 0 to L).
@@ -150,7 +153,7 @@ def perm_estimate_cL(L, iterations=1000, c_minus=0.2, c_plus=3.0, seed=42):
 
 if __name__ == "__main__":
     # Example usage
-    L = 20
+    L = 200
     iterations = 200000  
     cL_est = perm_estimate_cL(L, iterations=iterations, c_minus=0.2, c_plus=3.0, seed=42)
     print(f"PERM estimate for c_{L} ≈ {cL_est}")

@@ -201,12 +201,8 @@ def attempt_pivot(walk, occupied_set, rng=None):
         rng = np.random.default_rng(42)
 
     n = len(walk) - 1
-    p = rng.integers(n + 1)
+    p = rng.integers(1, n)
     sym = SYM_FUNCTIONS[rng.integers(len(SYM_FUNCTIONS))]
-
-    if p == 0 or p == n:
-        # Pivoting around an endpoint typically doesn't change anything
-        return walk, occupied_set, False
 
     pivot_x, pivot_y = walk[p]
     left_size = p
@@ -321,7 +317,38 @@ def run_pivot_get_mu_estimate(n=100, pivot_attempts=20000, burn_in=2000, seed=42
     return mu_est
 
 if __name__ == "__main__":
-    # Example usage
-    for test_n in [50, 100, 200]:
-        mu_est = run_pivot_get_mu_estimate(n=test_n, pivot_attempts=test_n*2000, burn_in=10000)
-        print(f'Pivot mu estimate for n={test_n}: {mu_est}')
+    import matplotlib.pyplot as plt
+
+    # 1. Choose a set of chain–lengths to run:
+    ns = [100, 200, 400, 800, 1600]
+    
+    # 2. Run pivot+atmosphere on each and collect mu_n estimates:
+    mu_estimates = []
+    for n in ns:
+        burn_in = int(20 * n * np.log(n))          # O(n log n) burn‐in
+        pivot_attempts = n * 10000
+        mu_n = run_pivot_get_mu_estimate(
+            n=n,
+            pivot_attempts=pivot_attempts,
+            burn_in=burn_in,
+            seed=42
+        )
+        print(f"n={n:4d}, μ̂ₙ = {mu_n:.6f}")
+        mu_estimates.append(mu_n)
+    
+    # 3. Fit μ̂ₙ = μ + A / n via linear regression in (1/n, μ̂ₙ):
+    x = 1.0 / np.array(ns)          # independent variable
+    y = np.array(mu_estimates)      # observed μ̂ₙ
+    A, mu_inf = np.polyfit(x, y, 1) # slope, intercept
+    
+    print()
+    print(f"Extrapolated μ∞ ≈ {mu_inf:.6f}")
+    print(f"Finite-n amplitude A ≈ {A:.6f}")
+    
+    # 4. (Optional) Quick plot to check linearity
+    plt.scatter(x, y, label="data")
+    plt.plot(x, A*x + mu_inf, '-', label=f"fit: μ+A/n")
+    plt.xlabel("1 / n")
+    plt.ylabel("μ̂ₙ")
+    plt.legend()
+    plt.show()
